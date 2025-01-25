@@ -134,57 +134,43 @@ def create_chart(symbol, df):
     return fig
 
 
-def create_investment_analysis(df_results):
-    """상위 5개 코인에 대한 투자 분석을 생성합니다."""
-    st.subheader("📊 상위 5개 코인 투자 분석")
+def create_investment_summary(df_results):
+    """상위 5개 코인에 대한 종합 투자 분석을 생성합니다."""
+    st.subheader("📈 투자 전략 분석")
 
-    top_5 = df_results.head(5)
+    # 시장 상황 요약
+    market_status = "강세" if df_results.head(5)["SEPA점수"].mean() > 0.7 else "약세"
+    st.markdown(f"### 현재 시장 상황: {market_status}")
 
-    for _, coin in top_5.iterrows():
-        with st.expander(f"{coin['심볼']} 상세 분석"):
-            col1, col2 = st.columns([2, 1])
+    # 투자 전략 제시
+    st.markdown(
+        """
+   ### 투자 포트폴리오 추천
+   - 안전: BTC/ETH (60-70%)
+   - 공격: 알트코인 (30-40%)
+   """
+    )
+
+    # 상위 5개 코인 투자 요약
+    st.markdown("### 상위 코인 투자 분석")
+    for _, coin in df_results.head(5).iterrows():
+        with st.expander(f"{coin['심볼']} - SEPA 점수: {coin['SEPA점수']:.2f}"):
+            col1, col2 = st.columns([1, 1])
 
             with col1:
-                st.plotly_chart(
-                    create_chart(coin["심볼"], coin["차트데이터"]),
-                    use_container_width=True,
+                st.markdown("**기술적 분석**")
+                st.markdown(
+                    f"""
+               - 추세: {'상승' if coin['차트데이터'].iloc[-1]['MA200'] > coin['차트데이터'].iloc[-20]['MA200'] else '하락'}
+               - 변동성: {coin['특징']['일일변동성']}
+               - 거래량 추세: {coin['특징']['거래량추세']}
+               - 추세 강도: {coin['특징']['추세강도']}
+               """
                 )
 
             with col2:
-                st.metric("현재가", f"₩{coin['현재가']:,.0f}")
-                st.metric("SEPA 점수", f"{coin['SEPA점수']:.2f}")
-
-                # 기술적 분석
-                ma_trend = (
-                    "상승"
-                    if coin["차트데이터"].iloc[-1]["MA200"]
-                    > coin["차트데이터"].iloc[-20]["MA200"]
-                    else "하락"
-                )
-                vol_trend = "증가" if coin["특징"]["거래량추세"] == "증가" else "감소"
-
-                analysis = {
-                    "추세": ma_trend,
-                    "변동성": coin["특징"]["일일변동성"],
-                    "거래량추세": vol_trend,
-                    "강도": coin["특징"]["추세강도"],
-                }
-
-                st.subheader("기술적 분석")
-                for key, value in analysis.items():
-                    st.text(f"{key}: {value}")
-
-                # 투자 의견
-                investment_opinions = {
-                    "KRW-BTC": "매수 추천 (분할매수)\n- 200일선 위 강세\n- 상승추세 지속\n- 고점 주의",
-                    "KRW-ETH": "매수 유망\n- BTC 대비 저평가\n- 200일선 상향돌파\n- 상승 모멘텀",
-                    "KRW-MTL": "관망\n- 높은 변동성\n- 하락추세\n- 거래량 감소",
-                    "KRW-BORA": "조정 후 매수\n- 200일선 지지\n- 조정 진행중",
-                    "KRW-JST": "지지선 확인 후 매수\n- 급등후 안정화\n- 200일선 상승전환",
-                }
-
-                st.subheader("투자 의견")
-                st.markdown(investment_opinions.get(coin["심볼"], "분석 필요"))
+                st.markdown("**투자 의견**")
+                st.markdown(coin["특징"]["투자의견"])
 
 
 def analyze_all_coins():
@@ -218,6 +204,74 @@ def analyze_all_coins():
     return None
 
 
+def generate_investment_opinion(
+    sepa_score, volatility, trend_strength, volume_trend, price_to_ma200
+):
+    """
+    기술적 지표를 기반으로 투자 의견을 동적으로 생성합니다.
+
+    Parameters:
+    - sepa_score: SEPA 전략 점수
+    - volatility: 일일 변동성
+    - trend_strength: 추세 강도
+    - volume_trend: 거래량 추세
+    - price_to_ma200: 현재가/200일 이평선 비율
+    """
+    opinion = ""
+
+    # SEPA 점수에 따른 기본 투자 의견
+    if sepa_score >= 0.9:
+        opinion = "매우 추천\n"
+    elif sepa_score >= 0.8:
+        opinion = "매수 유망\n"
+    elif sepa_score >= 0.7:
+        opinion = "매수 고려\n"
+    else:
+        opinion = "관망 추천\n"
+
+    # 세부 분석 추가
+    reasons = []
+
+    # 추세 강도 분석
+    if trend_strength > 20:
+        reasons.append("강한 상승 추세")
+    elif trend_strength > 10:
+        reasons.append("적정 상승 추세")
+    elif trend_strength < 0:
+        reasons.append("하락 추세 주의")
+
+    # 변동성 분석
+    if float(volatility.strip("%")) > 15:
+        reasons.append("높은 변동성 주의")
+    elif float(volatility.strip("%")) < 5:
+        reasons.append("안정적 변동성")
+
+    # 거래량 추세 분석
+    if volume_trend == "증가":
+        reasons.append("거래량 증가 중")
+    else:
+        reasons.append("거래량 감소 중")
+
+    # MA200 대비 가격 분석
+    price_ratio = float(price_to_ma200.strip("%"))
+    if price_ratio > 20:
+        reasons.append("과매수 구간")
+    elif price_ratio < -10:
+        reasons.append("과매도 구간")
+
+    # 투자 전략 제시
+    if sepa_score >= 0.8:
+        if float(volatility.strip("%")) > 15:
+            opinion += "- 분할 매수 전략 추천\n"
+        else:
+            opinion += "- 추세 추종 전략 추천\n"
+
+    # 세부 이유 추가
+    opinion += "\n".join(f"- {reason}" for reason in reasons)
+
+    return opinion
+
+
 def get_coin_characteristics(symbol, df):
     """코인의 특성을 분석합니다."""
     latest = df.iloc[-1]
@@ -227,29 +281,24 @@ def get_coin_characteristics(symbol, df):
         "증가" if df["volume"].tail(7).mean() > df["volume"].tail(30).mean() else "감소"
     )
     trend_strength = (latest["close"] - latest["MA200"]) / latest["MA200"] * 100
-    volume_to_mcap = latest["volume"] / (latest["close"] * df["volume"].mean())
+    price_to_ma200 = f"{trend_strength:.2f}%"
 
-    return {
+    characteristics = {
         "일일변동성": f"{volatility:.2f}%",
         "거래량추세": volume_trend,
         "추세강도": f"{trend_strength:.2f}%",
-        "거래량/시가총액": f"{volume_to_mcap:.4f}",
-        "투자의견": get_investment_opinion(
-            symbol, volatility, trend_strength, volume_trend
-        ),
     }
 
+    # 투자 의견 생성
+    characteristics["투자의견"] = generate_investment_opinion(
+        sepa_score=df.get("SEPA점수", 0.7),  # SEPA 점수가 없는 경우 기본값 0.7
+        volatility=characteristics["일일변동성"],
+        trend_strength=trend_strength,
+        volume_trend=volume_trend,
+        price_to_ma200=price_to_ma200,
+    )
 
-def get_investment_opinion(symbol, volatility, trend_strength, volume_trend):
-    """투자 의견을 생성합니다."""
-    opinions = {
-        "KRW-BTC": "매수 추천 (분할매수)\n- 200일선 위 강세\n- 상승추세 지속",
-        "KRW-ETH": "매수 유망\n- BTC 대비 저평가\n- 상승 모멘텀",
-        "KRW-MTL": "관망\n- 높은 변동성\n- 하락추세",
-        "KRW-BORA": "조정 후 매수\n- 200일선 지지\n- 조정 진행중",
-        "KRW-JST": "지지선 확인 후 매수\n- 급등후 안정화\n- 200일선 전환",
-    }
-    return opinions.get(symbol, "분석 필요")
+    return characteristics
 
 
 def main():
@@ -281,8 +330,22 @@ def main():
     ):
         df_results = st.session_state.analyzed_data
 
-        # 상위 5개 코인 탭
-        st.subheader("🏆 상위 5개 코인 분석")
+        # 투자 전략 분석
+        create_investment_summary(df_results)
+
+        # SEPA 점수 차트
+        st.plotly_chart(
+            px.bar(
+                df_results.head(10),
+                x="심볼",
+                y="SEPA점수",
+                title="상위 10개 코인 SEPA 점수",
+                color="SEPA점수",
+            )
+        )
+
+        # 상위 5개 코인 탭 분석
+        st.subheader("🏆 상위 5개 코인 차트 분석")
         tabs = st.tabs(
             [
                 f"#{i+1} {coin['심볼']}"
@@ -304,28 +367,39 @@ def main():
                     st.metric("현재가", f"₩{coin['현재가']:,.0f}")
                     st.metric("SEPA 점수", f"{coin['SEPA점수']:.2f}")
 
-                    st.subheader("기술적 분석")
                     for key, value in coin["특징"].items():
                         if key != "투자의견":
                             st.metric(key, value)
-
-                    st.subheader("투자 의견")
-                    st.markdown(coin["특징"]["투자의견"])
 
                     with st.expander("SEPA 조건"):
                         for k, v in coin["criteria_details"].items():
                             st.markdown(f"{'✅' if v else '❌'} {k}")
 
-        # SEPA 점수 차트
-        st.plotly_chart(
-            px.bar(
-                df_results.head(10),
-                x="심볼",
-                y="SEPA점수",
-                title="상위 10개 코인 SEPA 점수",
-                color="SEPA점수",
-            )
-        )
+        # 개별 코인 상세 분석
+        st.markdown("---")
+        st.subheader("📊 개별 코인 상세 분석")
+        selected_coin = st.selectbox("분석할 코인 선택", df_results["심볼"].tolist())
+
+        if selected_coin:
+            coin_data = df_results[df_results["심볼"] == selected_coin].iloc[0]
+
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.plotly_chart(create_chart(selected_coin, coin_data["차트데이터"]))
+
+            with col2:
+                st.subheader("코인 정보")
+                st.metric("현재가", f"₩{coin_data['현재가']:,.0f}")
+                st.metric("SEPA 점수", f"{coin_data['SEPA점수']:.2f}")
+                st.metric("거래량", f"₩{coin_data['거래량']:,.0f}")
+
+                st.markdown("### 투자 의견")
+                st.markdown(coin_data["특징"]["투자의견"])
+
+                with st.expander("기술적 지표 상세"):
+                    for key, value in coin_data["특징"].items():
+                        if key != "투자의견":
+                            st.text(f"{key}: {value}")
 
         # 전체 코인 리스트
         with st.expander("전체 분석 코인 목록"):
